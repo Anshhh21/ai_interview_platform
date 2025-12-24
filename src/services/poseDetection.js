@@ -1,9 +1,8 @@
-import { INTERVIEW_SETTINGS } from '../utils/constants';
+import { INTERVIEW_SETTINGS } from '../utils/constants'; // Ensure constants exist or remove this import
 
 let poseNet = null;
 let detectionInterval = null;
 
-// Initialize PoseNet
 export const initializePoseNet = async () => {
   try {
     if (window.posenet) {
@@ -22,27 +21,26 @@ export const initializePoseNet = async () => {
   }
 };
 
-// Start pose detection
 export const startPoseDetection = (videoElement, onPoseDetected) => {
   if (!poseNet || !videoElement) return;
 
   const detectPose = async () => {
-    if (videoElement.readyState === 4) {
+    if (videoElement.readyState === 4 && !videoElement.paused) {
       try {
         const pose = await poseNet.estimateSinglePose(videoElement, {
           flipHorizontal: false
         });
         onPoseDetected(pose);
       } catch (error) {
-        console.error('Pose detection error:', error);
+        // limit logging
       }
     }
   };
 
-  detectionInterval = setInterval(detectPose, INTERVIEW_SETTINGS.POSE_DETECTION_INTERVAL);
+  if (detectionInterval) clearInterval(detectionInterval);
+  detectionInterval = setInterval(detectPose, 500); // Check every 500ms
 };
 
-// Stop pose detection
 export const stopPoseDetection = () => {
   if (detectionInterval) {
     clearInterval(detectionInterval);
@@ -50,36 +48,42 @@ export const stopPoseDetection = () => {
   }
 };
 
-// Analyze posture from pose
+// services/poseDetection.js
+
 export const analyzePosture = (pose) => {
   if (!pose || !pose.keypoints) return null;
+  
+  // Ignore low confidence frames (e.g., bad lighting)
+  if (pose.score < 0.3) return null;
 
   const nose = pose.keypoints.find(kp => kp.part === 'nose');
   const leftShoulder = pose.keypoints.find(kp => kp.part === 'leftShoulder');
   const rightShoulder = pose.keypoints.find(kp => kp.part === 'rightShoulder');
 
+  // If we can't see shoulders, don't guess
   if (!nose || !leftShoulder || !rightShoulder) return null;
+  if (leftShoulder.score < 0.5 || rightShoulder.score < 0.5) return null;
 
   const warnings = [];
 
-  // Check if leaning too far forward/back
-  const shoulderMidY = (leftShoulder.position.y + rightShoulder.position.y) / 2;
-  const postureDiff = Math.abs(nose.position.y - shoulderMidY);
+  // 1. Check Slouching (Neck Length)
+  const avgShoulderY = (leftShoulder.position.y + rightShoulder.position.y) / 2;
+  const neckLength = Math.abs(avgShoulderY - nose.position.y);
 
-  if (postureDiff > INTERVIEW_SETTINGS.POSTURE_THRESHOLD) {
-    warnings.push({
-      time: Date.now(),
-      type: 'Poor posture detected - sit upright'
-    });
+  // DEBUGGING: Uncomment this to see your numbers in the console!
+  // console.log(`Neck Length: ${Math.round(neckLength)} (Threshold: 30)`);
+
+  // OLD THRESHOLD: 50 (Too strict) -> NEW THRESHOLD: 25 (Forgiving)
+  if (neckLength < 25) { 
+    warnings.push({ time: Date.now(), type: 'Sit Up Straight' });
   }
 
-  // Check shoulder alignment
-  const shoulderDiff = Math.abs(leftShoulder.position.y - rightShoulder.position.y);
-  if (shoulderDiff > INTERVIEW_SETTINGS.SHOULDER_ALIGNMENT_THRESHOLD) {
-    warnings.push({
-      time: Date.now(),
-      type: 'Uneven shoulder alignment'
-    });
+  // 2. Check Tilt (Shoulder Alignment)
+  const shoulderTilt = Math.abs(leftShoulder.position.y - rightShoulder.position.y);
+  
+  // OLD THRESHOLD: 40 -> NEW THRESHOLD: 50 (Allows natural movement)
+  if (shoulderTilt > 50) {
+    warnings.push({ time: Date.now(), type: 'Shoulders Uneven' });
   }
 
   return warnings.length > 0 ? warnings : null;

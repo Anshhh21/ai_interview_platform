@@ -1,65 +1,88 @@
-import { useState, useEffect, useRef } from 'react';
+import { useRef, useCallback, useState } from 'react';
 
 export const useCamera = () => {
-  const [stream, setStream] = useState(null);
-  const [error, setError] = useState(null);
-  const [isReady, setIsReady] = useState(false);
   const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const [recordedVideoBlob, setRecordedVideoBlob] = useState(null);
 
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
+    // 1. If stream already exists, just re-attach it to the video element
+    if (streamRef.current) {
+      if (videoRef.current && !videoRef.current.srcObject) {
+        videoRef.current.srcObject = streamRef.current;
+        await videoRef.current.play().catch(e => console.error("Play error:", e));
+      }
+      return streamRef.current;
+    }
+
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        },
-        audio: true
+      // 2. Request permissions
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720 }, 
+        audio: true 
       });
       
-      setStream(mediaStream);
-      
-      // Wait for video element to be ready
+      streamRef.current = stream;
+
+      // 3. Attach to video element if it exists
       if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        
-        // Wait for video to load
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play().then(() => {
-            setIsReady(true);
-            console.log('Camera started successfully');
-          }).catch(err => {
-            console.error('Error playing video:', err);
-            setError('Failed to play video');
-          });
-        };
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
       }
       
-      return mediaStream;
+      return stream;
     } catch (err) {
-      console.error('Camera error:', err);
-      setError('Please allow camera and microphone access');
-      alert('Camera access denied. Please allow camera and microphone permissions.');
-      throw err;
+      console.error("Camera Access Error:", err);
+      return null;
     }
-  };
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => {
-        track.stop();
-        console.log('Stopped track:', track.kind);
-      });
-      setStream(null);
-      setIsReady(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
   }, []);
 
-  return { stream, error, isReady, videoRef, startCamera, stopCamera };
+  const startRecording = useCallback(() => {
+    if (!streamRef.current) return;
+    
+    chunksRef.current = []; // Reset chunks
+    const recorder = new MediaRecorder(streamRef.current, { mimeType: 'video/webm' });
+    
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+      setRecordedVideoBlob(blob);
+      console.log("Recording finished, blob size:", blob.size);
+    };
+
+    recorder.start();
+    mediaRecorderRef.current = recorder;
+  }, []);
+
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  return { 
+    videoRef, 
+    startCamera, 
+    stopCamera,
+    startRecording,
+    stopRecording,
+    recordedVideoBlob 
+  };
 };

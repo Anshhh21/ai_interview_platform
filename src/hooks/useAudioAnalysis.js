@@ -1,9 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
-import { INTERVIEW_SETTINGS } from '../utils/constants';
 
 export const useAudioAnalysis = () => {
   const [stressLevel, setStressLevel] = useState(0);
-  
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animationFrameRef = useRef(null);
@@ -16,7 +14,7 @@ export const useAudioAnalysis = () => {
       const microphone = audioContext.createMediaStreamSource(stream);
       
       analyser.smoothingTimeConstant = 0.8;
-      analyser.fftSize = 1024;
+      analyser.fftSize = 256; // Smaller FFT is faster
       
       microphone.connect(analyser);
       audioContextRef.current = audioContext;
@@ -26,16 +24,25 @@ export const useAudioAnalysis = () => {
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
         analyser.getByteFrequencyData(dataArray);
         
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
-        const variance = dataArray.reduce((sum, val) => 
-          sum + Math.pow(val - average, 2), 0
-        ) / dataArray.length;
+        // Calculate volume (RMS)
+        let sum = 0;
+        for(let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const averageVolume = sum / dataArray.length;
         
-        // Higher variance indicates stress/nervousness
-        const stressScore = Math.min(100, (variance / 10));
-        setStressLevel(prev => (prev * 0.7 + stressScore * 0.3)); // Smooth the value
+        // Normalize: 0-255 -> 0-100 scale
+        // Normal speech usually sits around 30-50 volume. 
+        // We map volume directly to "Excitement/Stress" for this demo.
+        let rawStress = (averageVolume / 128) * 100;
+        
+        // Clamp between 5 and 100 to avoid flickering 0
+        rawStress = Math.min(100, Math.max(5, rawStress));
 
-        animationFrameRef.current = setTimeout(analyzeAudio, INTERVIEW_SETTINGS.AUDIO_ANALYSIS_INTERVAL);
+        // Smooth the transition so it doesn't jump instantly
+        setStressLevel(prev => (prev * 0.9) + (rawStress * 0.1));
+
+        animationFrameRef.current = requestAnimationFrame(analyzeAudio);
       };
 
       analyzeAudio();
@@ -44,11 +51,12 @@ export const useAudioAnalysis = () => {
     }
   }, []);
 
-  const stopAnalysis = useCallback(() => {
+const stopAnalysis = useCallback(() => {
     if (animationFrameRef.current) {
-      clearTimeout(animationFrameRef.current);
+      cancelAnimationFrame(animationFrameRef.current);
     }
-    if (audioContextRef.current) {
+    // Added safety check here:
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close();
     }
   }, []);
