@@ -11,50 +11,50 @@ export const AnswerInput = ({
   onSubmit,
   isLastQuestion
 }) => {
+  const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
+
   return (
-    <div className="bg-gray-900 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-white font-semibold">Your Answer:</span>
-        <div className="flex gap-2">
-          {!isRecording ? (
-            <button
-              onClick={onStartRecording}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-all"
-            >
-              <Mic className="w-5 h-5" />
-              Start Recording
-            </button>
-          ) : (
-            <button
-              onClick={onStopRecording}
-              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 animate-pulse"
-            >
-              <MicOff className="w-5 h-5" />
-              Stop Recording
-            </button>
-          )}
-        </div>
+    <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm">
+
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-lg font-bold text-slate-800">Your Answer</h3>
+
+        {!isRecording ? (
+          <button
+            onClick={onStartRecording}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-semibold flex gap-2"
+          >
+            <Mic size={18} /> Start Speaking
+          </button>
+        ) : (
+          <button
+            onClick={onStopRecording}
+            className="bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-xl font-semibold flex gap-2 animate-pulse"
+          >
+            <MicOff size={18} /> Pause
+          </button>
+        )}
       </div>
-      
+
       <textarea
         value={answer}
         onChange={(e) => setAnswer(e.target.value)}
-        placeholder="Your answer will appear here as you speak, or type directly..."
-        className="w-full bg-gray-800 text-white rounded-lg p-4 min-h-50 border border-gray-700 focus:border-purple-500 focus:outline-none resize-none"
+        placeholder="Speak or type your answer…"
+        className="w-full min-h-35 bg-slate-50 border border-slate-200 rounded-2xl p-6 text-lg resize-none focus:ring-2 focus:ring-blue-500 outline-none"
       />
 
-      <div className="flex justify-between items-center mt-4">
-        <div className="flex items-center gap-4 text-sm text-gray-400">
+      <div className="flex justify-between items-center mt-6">
+        <div className="flex gap-6 text-sm text-slate-500">
           <span className="flex items-center gap-1">
-            <Clock className="w-4 h-4" />
-            Pauses: {pauseCount}
+            <Clock size={14} /> Pauses: {pauseCount}
           </span>
-          <span>Words: {answer.trim().split(/\s+/).filter(Boolean).length}</span>
+          <span>Words: {wordCount}</span>
         </div>
+
         <button
           onClick={onSubmit}
           disabled={!answer.trim()}
-          className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all font-semibold"
+          className="bg-linear-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-xl font-bold disabled:opacity-40"
         >
           {isLastQuestion ? 'Finish Interview' : 'Next Question'}
         </button>

@@ -30,7 +30,7 @@ export const LoginPage = () => {
       <div className="auth-card">
         <div className="auth-header">
           <div className="logo-icon">🤖</div>
-          <h1>AI Interviewer</h1>
+          <h2>{isLogin ? 'Sign In to Your Account' : 'Create a New Account'}</h2>
           <p>
             {isLogin 
               ? 'Welcome back! Please login to your account.' 

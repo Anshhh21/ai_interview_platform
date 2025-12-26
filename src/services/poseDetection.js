@@ -1,4 +1,4 @@
-import { INTERVIEW_SETTINGS } from '../utils/constants'; // Ensure constants exist or remove this import
+
 
 let poseNet = null;
 let detectionInterval = null;
