@@ -6,9 +6,9 @@ import { LoginPage } from './components/LoginPage';
 import { useCamera } from './hooks/useCamera';
 import { useVoiceRecognition } from './hooks/useVoiceRecognition';
 import { useAudioAnalysis } from './hooks/useAudioAnalysis';
-import { usePoseDetection } from './hooks/usePoseDetection'; // Ensure this hook is exported correctly now!
+import { usePoseDetection } from './hooks/usePoseDetection';
 import { generateQuestions, analyzeInterview } from './services/geminiApi';
-import { auth, saveInterviewSession } from './services/firebase';
+import { auth } from './services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import './App.css';
 
@@ -16,7 +16,6 @@ function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // --- INTERVIEW STATE ---
   const [page, setPage] = useState('home'); 
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [voiceMode, setVoiceMode] = useState(true);
@@ -29,26 +28,11 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // --- CUSTOM HOOKS ---
-  const { 
-    videoRef, startCamera, stopCamera, 
-    startRecording: startVideoRecording, 
-    stopRecording: stopVideoRecording 
-  } = useCamera();
-
-  const { 
-    isRecording: isVoiceRecording, transcript, pauseCount, 
-    startRecording: startVoice, stopRecording: stopVoice, resetTranscript 
-  } = useVoiceRecognition();
-
+  const { videoRef, startCamera, stopCamera, startRecording: startVideoRecording, stopRecording: stopVideoRecording } = useCamera();
+  const { isRecording: isVoiceRecording, transcript, pauseCount, startRecording: startVoice, stopRecording: stopVoice, resetTranscript } = useVoiceRecognition();
   const { stressLevel, startAnalysis, stopAnalysis } = useAudioAnalysis();
-  
-  const { 
-    postureWarnings, initialize: initPoseDetection, 
-    startDetection, stopDetection, resetWarnings 
-  } = usePoseDetection();
+  const { postureWarnings, initialize: initPoseDetection, startDetection, stopDetection, resetWarnings } = usePoseDetection();
 
-  // --- AUTH OBSERVER ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -66,34 +50,19 @@ function App() {
   const handleStartInterview = async () => {
     setPage('interview');
     setIsLoading(true);
-    
-    // 1. Generate Content
     const generatedQuestions = await generateQuestions(selectedProfile);
     setQuestions(generatedQuestions);
-    
-    // 2. Initialize PoseNet
     await initPoseDetection();
-    
-    // 3. Ready to render
     setIsLoading(false);
     setInterviewStarted(true);
   };
 
-  // Triggers Voice, Audio Analysis, AND Video Recording
   const handleStartRecording = async () => {
     try {
       await startVoice(); 
-      try {
-        await startAnalysis();
-      } catch (e) {
-        console.warn("Audio analysis failed to start:", e);
-      }
-      if (videoRef.current && videoRef.current.srcObject) {
-        startVideoRecording();
-      }
-    } catch (err) {
-      console.error("Failed to start recording session:", err);
-    }
+      try { await startAnalysis(); } catch (e) { console.warn(e); }
+      if (videoRef.current && videoRef.current.srcObject) startVideoRecording();
+    } catch (err) { console.error(err); }
   };
 
   const handleStopRecording = () => { 
@@ -104,35 +73,26 @@ function App() {
 
   const handleSubmitAnswer = () => {
     handleStopRecording();
-    
-    // 1. Save Answer
     const answerData = {
-      question: questions[currentQuestion].question,
+      question: questions[currentQuestion]?.question,
       answer: currentAnswer,
       pausesDuring: pauseCount,
       timestamp: Date.now()
     };
     
-    // Use callback to ensure we have the latest state
     setAnswers(prev => {
         const newAnswers = [...prev, answerData];
-        
-        // 2. CHECK IF LAST QUESTION
         if (currentQuestion < questions.length - 1) {
-            // Move to next
-            setQuestions(prevQ => prevQ); 
             setCurrentQuestion(prev => prev + 1);
             resetTranscript();
             setCurrentAnswer('');
         } else {
-            // 3. IF LAST QUESTION -> END INTERVIEW
             handleEndInterview(newAnswers);
         }
         return newAnswers;
     });
   };
 
-  // --- FIXED END INTERVIEW FUNCTION ---
   const handleEndInterview = async (finalAnswers = answers) => {
     setIsAnalyzing(true);
     stopCamera();
@@ -140,34 +100,17 @@ function App() {
     handleStopRecording();
 
     try {
-      const answersToAnalyze = Array.isArray(finalAnswers) ? finalAnswers : answers;
-
       const metrics = {
-        totalPauses: answersToAnalyze.reduce((sum, a) => sum + (a.pausesDuring || 0), 0),
+        totalPauses: finalAnswers.reduce((sum, a) => sum + (a.pausesDuring || 0), 0),
         postureWarnings: postureWarnings.length,
         avgStressLevel: stressLevel
       };
 
-      const analysis = await analyzeInterview(answersToAnalyze, selectedProfile, metrics);
+      const analysis = await analyzeInterview(finalAnswers, selectedProfile, metrics);
       setFeedback(analysis);
-
-      // if (user) {
-      //   try {
-      //     await saveInterviewSession({
-      //       userId: user.uid,
-      //       userEmail: user.email,
-      //       profile: selectedProfile.name,
-      //       answers: answersToAnalyze,
-      //       feedback: analysis,
-      //       metrics: metrics,
-      //     });
-      //   } catch (fbError) {
-      //     console.error("Firebase save failed:", fbError);
-      //   }
-      // }
       setPage('results');
     } catch (error) {
-      console.error("Critical error during interview end:", error);
+      console.error(error);
       setPage('results');
     } finally {
       setIsAnalyzing(false);
@@ -187,7 +130,7 @@ function App() {
     resetWarnings();
   };
 
-  if (authLoading) return <div className="loading">Checking security...</div>;
+  if (authLoading) return <div>Loading...</div>;
   if (!user) return <LoginPage />;
 
   return (
@@ -211,21 +154,18 @@ function App() {
         <InterviewPage
           questions={questions}
           currentQuestion={currentQuestion}
-          interviewStarted={interviewStarted}
           isRecording={isVoiceRecording} 
           currentAnswer={currentAnswer}
           setCurrentAnswer={setCurrentAnswer}
-          pauseCount={pauseCount}
           stressLevel={stressLevel}
           postureWarnings={postureWarnings}
           videoRef={videoRef}
           startCamera={startCamera}
           startDetection={startDetection}
-          voiceMode={voiceMode}
           onStartRecording={handleStartRecording}
           onStopRecording={handleStopRecording}
           onSubmitAnswer={handleSubmitAnswer}
-          onEndInterview={() => handleEndInterview(answers)} // Pass current answers wrapper
+          onEndInterview={() => handleEndInterview(answers)}
           isLoading={isLoading}
           isAnalyzing={isAnalyzing}
         />

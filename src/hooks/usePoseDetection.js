@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-// Make sure this path points to your service file correctly!
+// This points to the service that handles the actual PoseNet logic
 import { initializePoseNet, startPoseDetection, stopPoseDetection, analyzePosture } from '../services/poseDetection';
 
-// CRITICAL: Must start with 'export const'
+// This MUST be 'export const' to match the import in App.jsx
 export const usePoseDetection = () => {
   const [postureWarnings, setPostureWarnings] = useState([]);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -14,9 +14,12 @@ export const usePoseDetection = () => {
   }, []);
 
   const startDetection = useCallback((videoElement) => {
+    if (!videoElement) return;
+    
     startPoseDetection(videoElement, (pose) => {
       const warnings = analyzePosture(pose);
       if (warnings && warnings.length > 0) {
+        // Keep only the most recent 5 warnings
         setPostureWarnings(prev => [...prev, ...warnings].slice(-5));
       }
     });

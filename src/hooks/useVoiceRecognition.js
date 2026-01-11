@@ -8,7 +8,6 @@ export const useVoiceRecognition = () => {
   
   const recognitionRef = useRef(null);
   const isExplicitlyStopped = useRef(false);
-  const retryCount = useRef(0); // Prevent infinite loops
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -22,40 +21,26 @@ export const useVoiceRecognition = () => {
       recognition.onstart = () => {
         setIsRecording(true);
         isExplicitlyStopped.current = false;
-        retryCount.current = 0; // Reset retries on success
         setError(null);
       };
 
+      // Fix 5: Clean Result Handling
       recognition.onresult = (event) => {
-        let currentTranscript = '';
-        for (let i = 0; i < event.results.length; i++) {
-          currentTranscript += event.results[i][0].transcript;
-        }
-        setTranscript(currentTranscript);
-        
-        // Simple pause detection based on silence between results
-        setPauseCount(prev => prev + 1); 
-      };
-
-      recognition.onerror = (event) => {
-        console.warn("Speech recognition error:", event.error);
-        if (event.error === 'network') {
-          retryCount.current += 1;
-          if (retryCount.current > 2) {
-            setError("Network error: Voice recognition unavailable. Please type your answer.");
-            recognition.stop();
-            isExplicitlyStopped.current = true; // Force stop
-            return;
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
           }
+        }
+        if (finalTranscript) {
+          setTranscript(prev => (prev + ' ' + finalTranscript).trim());
+          setPauseCount(prev => prev + 1); 
         }
       };
 
       recognition.onend = () => {
-        if (!isExplicitlyStopped.current && !error && retryCount.current <= 2) {
-           // Small delay before restarting to prevent CPU hogging
-           setTimeout(() => {
-             try { recognition.start(); } catch(e) {}
-           }, 300);
+        if (!isExplicitlyStopped.current) {
+           setTimeout(() => { try { recognition.start(); } catch(e) {} }, 300);
         } else {
           setIsRecording(false);
         }
@@ -63,21 +48,14 @@ export const useVoiceRecognition = () => {
 
       recognitionRef.current = recognition;
     }
-
-    return () => {
-      if (recognitionRef.current) recognitionRef.current.abort();
-    };
-  }, [error]);
+  }, []);
 
   const startRecording = useCallback(() => {
     setTranscript('');
     setPauseCount(0);
-    setError(null);
     isExplicitlyStopped.current = false;
-    retryCount.current = 0;
-    
     if (recognitionRef.current) {
-      try { recognitionRef.current.start(); } catch (e) { console.error(e); }
+      try { recognitionRef.current.start(); } catch (e) {}
     }
   }, []);
 
