@@ -1,8 +1,7 @@
 import React from 'react';
-import { TrendingUp, AlertCircle } from 'lucide-react';
+// import { TrendingUp, AlertCircle } from 'lucide-react'; // Uncomment if using icons
 
 export const ResultsPage = ({ feedback, onRestart }) => {
-  // If API failed and fallback failed, show a simple error state
   if (!feedback) return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">
       <div className="text-center">
@@ -31,7 +30,7 @@ export const ResultsPage = ({ feedback, onRestart }) => {
           </defs>
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-4xl font-black text-white">{safeScore}</span>
+          <span className="text-4xl font-black text-white">{Math.round(safeScore)}</span>
         </div>
       </div>
     );
@@ -43,32 +42,32 @@ export const ResultsPage = ({ feedback, onRestart }) => {
 
       <div className="relative w-full max-w-6xl mx-auto">
         <div className="text-center mb-14">
-          <h1 className="text-5xl font-bold">Interview Complete</h1>
-          <p className="text-gray-400 mt-3">Detailed breakdown of your performance</p>
+          <h1 className="text-5xl font-bold">Interview Analysis</h1>
+          <p className="text-gray-400 mt-3">Here is how you performed</p>
         </div>
 
         <div className="flex justify-center mb-14">
           <div className="w-full max-w-2xl bg-white/5 border border-white/10 rounded-3xl p-10 text-center">
             <ScoreCircle score={feedback.overallScore} />
-            <h2 className="text-2xl font-semibold mt-4">Overall Performance</h2>
+            <h2 className="text-2xl font-semibold mt-4">Overall Score</h2>
             <p className="text-gray-400 mt-2">
-              {feedback.overallScore >= 80 ? 'Excellent performance' : feedback.overallScore >= 60 ? 'Good effort' : 'Keep practicing'}
+              {feedback.overallScore >= 80 ? 'Outstanding! Ready for hire.' : feedback.overallScore >= 60 ? 'Good job, just a few tweaks needed.' : 'Keep practicing, you are getting there!'}
             </p>
           </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {/* TECHNICAL SECTION with Safety Checks */}
+          {/* TECHNICAL SECTION */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
             <h3 className="text-lg font-semibold mb-3">Technical Skills</h3>
             <div className="flex justify-between mb-2">
               <span className="text-gray-400">Score</span>
               <span className="text-2xl font-bold text-purple-400">{feedback.technicalSkills?.score || 0}/100</span>
             </div>
-            <p className="text-gray-300 mb-4">{feedback.technicalSkills?.feedback || "No feedback available."}</p>
+            <p className="text-gray-300 mb-4">{feedback.technicalSkills?.feedback}</p>
             {feedback.technicalSkills?.weakAreas?.length > 0 && (
               <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
-                <p className="text-sm font-semibold text-red-400 mb-2">Areas to Improve</p>
+                <p className="text-sm font-semibold text-red-400 mb-2">Focus Areas</p>
                 <ul className="list-disc list-inside text-sm text-red-300">{feedback.technicalSkills.weakAreas.map((a, i) => <li key={i}>{a}</li>)}</ul>
               </div>
             )}
@@ -81,7 +80,7 @@ export const ResultsPage = ({ feedback, onRestart }) => {
               <span className="text-gray-400">Score</span>
               <span className="text-2xl font-bold text-blue-400">{feedback.communication?.score || 0}/100</span>
             </div>
-            <p className="text-gray-300">{feedback.communication?.feedback || "No communication feedback available."}</p>
+            <p className="text-gray-300">{feedback.communication?.feedback}</p>
           </div>
 
           {/* CONFIDENCE SECTION */}
@@ -91,24 +90,28 @@ export const ResultsPage = ({ feedback, onRestart }) => {
               <span className="text-gray-400">Score</span>
               <span className="text-2xl font-bold text-emerald-400">{feedback.confidence?.score || 0}/100</span>
             </div>
-            <p className="text-gray-300">{feedback.confidence?.feedback || "No confidence feedback available."}</p>
+            <p className="text-gray-300">{feedback.confidence?.feedback}</p>
           </div>
 
-          {/* BODY LANGUAGE SECTION */}
+          {/* AI BODY LANGUAGE SECTION */}
           <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold mb-4">Body Language</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between text-gray-300">
+            <h3 className="text-lg font-semibold mb-4">AI Body Analysis</h3>
+            <div className="space-y-4 text-sm">
+              <div className="flex justify-between items-center text-gray-300">
                 <span>Posture Score</span>
-                <span className="font-bold text-indigo-400">{feedback.postureScore || 0}/100</span>
+                <span className={`font-bold text-xl ${feedback.postureScore > 80 ? 'text-green-400' : 'text-yellow-400'}`}>
+                    {feedback.postureScore}/100
+                </span>
               </div>
-              <div className="flex justify-between text-gray-300">
-                <span>Stress Level (Low is better)</span>
-                <span className="font-bold text-emerald-400">{feedback.stressScore || 0}/100</span>
+              <div className="flex justify-between items-center text-gray-300">
+                <span>Composure (Calmness)</span>
+                <span className={`font-bold text-xl ${feedback.stressScore > 80 ? 'text-green-400' : 'text-blue-400'}`}>
+                    {feedback.stressScore}/100
+                </span>
               </div>
-              <div className="pt-3 border-t border-white/10 text-gray-400">
-                <p>Posture warnings: {feedback.postureWarnings || 0}</p>
-                <p>Total pauses: {feedback.totalPauses || 0}</p>
+              <div className="pt-3 border-t border-white/10 text-gray-400 flex justify-between">
+                 <span>Posture Warnings: {feedback.postureWarnings}</span>
+                 <span>Pauses detected: {feedback.totalPauses}</span>
               </div>
             </div>
           </div>

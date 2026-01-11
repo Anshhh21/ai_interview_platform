@@ -8,14 +8,18 @@ export const useVoiceRecognition = () => {
   
   const recognitionRef = useRef(null);
   const isExplicitlyStopped = useRef(false);
+  
+  // NEW: Store confirmed text safely so interim updates don't overwrite history
+  const accumulatedTextRef = useRef(''); 
 
   useEffect(() => {
+    // Browser compatibility check
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     
     if (SpeechRecognition) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
-      recognition.interimResults = true;
+      recognition.interimResults = true; // CRITICAL: This allows real-time typing
       recognition.lang = 'en-US';
 
       recognition.onstart = () => {
@@ -24,18 +28,29 @@ export const useVoiceRecognition = () => {
         setError(null);
       };
 
-      // Fix 5: Clean Result Handling
       recognition.onresult = (event) => {
-        let finalTranscript = '';
+        let interimTranscript = '';
+        let newFinalTranscript = '';
+
+        // Loop through results (both final and interim)
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+            newFinalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
           }
         }
-        if (finalTranscript) {
-          setTranscript(prev => (prev + ' ' + finalTranscript).trim());
-          setPauseCount(prev => prev + 1); 
+
+        // 1. If we have a completed sentence, add it to our permanent history
+        if (newFinalTranscript) {
+           accumulatedTextRef.current += ' ' + newFinalTranscript;
+           setPauseCount(prev => prev + 1); 
         }
+
+        // 2. Update the UI with: History + Current Live Words
+        // This triggers the re-render immediately, making the UI feel "Live"
+        // It also resets the Pause Timer in App.jsx instantly!
+        setTranscript((accumulatedTextRef.current + ' ' + interimTranscript).trim());
       };
 
       recognition.onend = () => {
@@ -53,6 +68,7 @@ export const useVoiceRecognition = () => {
   const startRecording = useCallback(() => {
     setTranscript('');
     setPauseCount(0);
+    accumulatedTextRef.current = ''; // Reset history
     isExplicitlyStopped.current = false;
     if (recognitionRef.current) {
       try { recognitionRef.current.start(); } catch (e) {}
@@ -65,7 +81,10 @@ export const useVoiceRecognition = () => {
     setIsRecording(false);
   }, []);
 
-  const resetTranscript = useCallback(() => setTranscript(''), []);
+  const resetTranscript = useCallback(() => {
+      setTranscript('');
+      accumulatedTextRef.current = '';
+  }, []);
 
   return { isRecording, transcript, pauseCount, startRecording, stopRecording, resetTranscript, error };
 };

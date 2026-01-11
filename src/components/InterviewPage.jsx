@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
-  Mic, MicOff, AlertCircle, Activity, User, XCircle, CheckCircle
+  Mic, MicOff, AlertCircle, XCircle, CheckCircle, Clock
 } from 'lucide-react';
-// The path must use '../' to go up from components to services
 import { speakText, stopSpeaking } from '../services/speechService'; 
 
 export const InterviewPage = ({
@@ -15,23 +14,63 @@ export const InterviewPage = ({
   isLoading, isAnalyzing
 }) => {
 
+  const [hasSpokenCurrent, setHasSpokenCurrent] = useState(false);
+  const [showPauseWarning, setShowPauseWarning] = useState(false);
+  const lastSpeechTimeRef = useRef(Date.now());
+  const questionSpokenRef = useRef(false);
+
   useEffect(() => {
     if (!isLoading && videoRef.current) {
       startCamera();
     }
   }, [isLoading, startCamera, videoRef]);
 
-  // AI VOICE: Reads the current question aloud
   useEffect(() => {
-    if (!isLoading && questions && questions[currentQuestion]) {
-      stopSpeaking(); 
-      speakText(questions[currentQuestion].question);
-    }
-    return () => stopSpeaking(); 
-  }, [currentQuestion, isLoading, questions]);
+    setHasSpokenCurrent(false);
+    questionSpokenRef.current = false;
+    stopSpeaking();
+    setShowPauseWarning(false);
+  }, [currentQuestion]);
 
+  useEffect(() => {
+    if (isRecording && !questionSpokenRef.current && questions && questions[currentQuestion]) {
+        const timer = setTimeout(() => {
+            speakText(questions[currentQuestion].question);
+            questionSpokenRef.current = true;
+            setHasSpokenCurrent(true);
+        }, 500);
+        return () => clearTimeout(timer);
+    }
+  }, [isRecording, questions, currentQuestion]);
+
+  // --- PAUSE DETECTION UPDATED TO 7 SECONDS ---
+  useEffect(() => {
+    let pauseInterval;
+    
+    if (isRecording) {
+      lastSpeechTimeRef.current = Date.now();
+      if (showPauseWarning) setShowPauseWarning(false); 
+
+      pauseInterval = setInterval(() => {
+        const timeSinceLastSpeech = Date.now() - lastSpeechTimeRef.current;
+        
+        // CHANGED: 4000 -> 7000 (7 Seconds)
+        if (timeSinceLastSpeech > 5000) {
+           setShowPauseWarning(true);
+        }
+      }, 1000);
+    } else {
+      setShowPauseWarning(false);
+    }
+
+    return () => clearInterval(pauseInterval);
+  }, [currentAnswer, isRecording]); 
+
+  // --- ENSURE POSE DETECTION STARTS ---
   const handleVideoLoad = () => {
+    // We try to start detection immediately when metadata loads
     if (videoRef.current && startDetection) {
+      console.log("🎥 Video Loaded, requesting detection start...");
       startDetection(videoRef.current);
     }
   };
@@ -84,17 +123,33 @@ export const InterviewPage = ({
               ref={videoRef}
               autoPlay
               muted
+              width="640"
+              height="480"
               playsInline
-              onLoadedMetadata={handleVideoLoad}
+              onLoadedMetadata={handleVideoLoad} 
+              onPlay={() => console.log("▶️ Video playing")} 
               className="w-full h-full object-cover scale-x-[-1]"
             />
+            
             {isPostureBad && (
               <div className="absolute bottom-4 left-4 right-4">
-                <div className="bg-amber-500 text-amber-900 px-6 py-4 rounded-2xl flex gap-3 items-center shadow-xl">
+                <div className="bg-amber-500 text-amber-900 px-6 py-4 rounded-2xl flex gap-3 items-center shadow-xl animate-bounce">
                   <AlertCircle />
                   <div>
                     <p className="text-xs font-bold uppercase">Correction Needed</p>
                     <p className="font-medium">{postureText}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showPauseWarning && !isPostureBad && (
+              <div className="absolute bottom-4 left-4 right-4">
+                <div className="bg-blue-500 text-white px-6 py-4 rounded-2xl flex gap-3 items-center shadow-xl animate-pulse">
+                  <Clock />
+                  <div>
+                    <p className="text-xs font-bold uppercase">Long Pause Detected</p>
+                    <p className="font-medium">Try to keep your answer flowing</p>
                   </div>
                 </div>
               </div>

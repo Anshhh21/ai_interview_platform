@@ -19,11 +19,13 @@ function App() {
   const [page, setPage] = useState('home'); 
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [voiceMode, setVoiceMode] = useState(true);
-  const [interviewStarted, setInterviewStarted] = useState(false);
+  
+  // STATE
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState([]);
   const [currentAnswer, setCurrentAnswer] = useState('');
+  
   const [feedback, setFeedback] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -41,6 +43,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Sync transcript to answer box
   useEffect(() => {
     if (transcript) setCurrentAnswer(transcript);
   }, [transcript]);
@@ -50,15 +53,18 @@ function App() {
   const handleStartInterview = async () => {
     setPage('interview');
     setIsLoading(true);
+    
+    // Questions are generated here (Count is set in geminiApi.js)
     const generatedQuestions = await generateQuestions(selectedProfile);
     setQuestions(generatedQuestions);
+    
     await initPoseDetection();
     setIsLoading(false);
-    setInterviewStarted(true);
   };
 
   const handleStartRecording = async () => {
     try {
+      if (!currentAnswer) resetTranscript(); // Clear old text
       await startVoice(); 
       try { await startAnalysis(); } catch (e) { console.warn(e); }
       if (videoRef.current && videoRef.current.srcObject) startVideoRecording();
@@ -71,26 +77,32 @@ function App() {
     stopVideoRecording(); 
   };
 
+  // --- FIXED: Submit Logic (Prevents Skipping) ---
   const handleSubmitAnswer = () => {
     handleStopRecording();
+    
+    // If you say nothing, we save this text so the AI knows you were silent
+    const finalAnswerText = currentAnswer || transcript || "[No answer provided]";
+    
     const answerData = {
       question: questions[currentQuestion]?.question,
-      answer: currentAnswer,
+      answer: finalAnswerText,
       pausesDuring: pauseCount,
       timestamp: Date.now()
     };
     
-    setAnswers(prev => {
-        const newAnswers = [...prev, answerData];
-        if (currentQuestion < questions.length - 1) {
-            setCurrentQuestion(prev => prev + 1);
-            resetTranscript();
-            setCurrentAnswer('');
-        } else {
-            handleEndInterview(newAnswers);
-        }
-        return newAnswers;
-    });
+    // Update answers list
+    const newAnswersList = [...answers, answerData];
+    setAnswers(newAnswersList);
+
+    // Navigation Logic
+    if (currentQuestion < questions.length - 1) {
+        setCurrentQuestion(prev => prev + 1);
+        resetTranscript();
+        setCurrentAnswer('');
+    } else {
+        handleEndInterview(newAnswersList);
+    }
   };
 
   const handleEndInterview = async (finalAnswers = answers) => {
@@ -103,7 +115,7 @@ function App() {
       const metrics = {
         totalPauses: finalAnswers.reduce((sum, a) => sum + (a.pausesDuring || 0), 0),
         postureWarnings: postureWarnings.length,
-        avgStressLevel: stressLevel
+        avgStressLevel: stressLevel || 50
       };
 
       const analysis = await analyzeInterview(finalAnswers, selectedProfile, metrics);
@@ -120,7 +132,6 @@ function App() {
   const handleRestart = () => {
     setPage('home');
     setSelectedProfile(null);
-    setInterviewStarted(false);
     setCurrentQuestion(0);
     setQuestions([]);
     setAnswers([]);
